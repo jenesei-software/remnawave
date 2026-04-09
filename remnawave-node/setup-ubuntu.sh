@@ -85,6 +85,21 @@ configure_ssh() {
   # On some fresh/minimal images this runtime dir may be missing before sshd start.
   install -d -m 0755 /run/sshd
   sshd -t
+
+  # Ubuntu 24.04 may use ssh.socket activation; ensure it listens on PORT_SSH now.
+  if systemctl list-unit-files --type=socket | grep -q '^ssh.socket'; then
+    if systemctl is-enabled --quiet ssh.socket || systemctl is-active --quiet ssh.socket; then
+      install -d -m 0755 /etc/systemd/system/ssh.socket.d
+      cat > /etc/systemd/system/ssh.socket.d/override.conf <<EOF
+[Socket]
+ListenStream=
+ListenStream=$PORT_SSH
+EOF
+      systemctl daemon-reload
+      systemctl restart ssh.socket
+    fi
+  fi
+
   systemctl restart sshd 2>/dev/null || systemctl restart ssh
 }
 
@@ -92,6 +107,7 @@ install_packages() {
   log "Обновляю систему и устанавливаю базовые пакеты"
   export DEBIAN_FRONTEND=noninteractive
   export UCF_FORCE_CONFFOLD=1
+  export NEEDRESTART_MODE=a
   apt-get update
   apt-get -y \
     -o Dpkg::Options::="--force-confdef" \
@@ -138,9 +154,9 @@ main() {
   create_or_update_user
   setup_ssh_key
   install_packages
+  configure_ufw
   configure_ssh
   ensure_fail2ban
-  configure_ufw
 
   log "Готово. Подключайся так: ssh $USER_NAME@<SERVER_IP> -p $PORT_SSH"
   log "Перед выходом обязательно проверь, что новый SSH доступ работает в отдельной сессии."
