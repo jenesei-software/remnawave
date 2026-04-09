@@ -243,7 +243,7 @@ systemctl status fail2ban
 
 * Run `setup-ubuntu.sh` carefully on a fresh server and only if your SSH public key is correct.
 * The script disables password-based SSH login, so an invalid `SSH_PUB` value may lock you out of the server.
-* Reboot is normally not required after `setup-ubuntu.sh`; SSH must switch to `PORT_SSH` immediately.
+*  is normally not required after `setup-ubuntu.sh`; SSH must switch to `PORT_SSH` immediately.
 * If the new SSH port does not accept connections right away on Ubuntu 24.04, run: `sudo systemctl daemon-reload && sudo systemctl restart ssh.socket && sudo systemctl restart ssh`.
 * Keep your current root SSH session open until a new session on `PORT_SSH` is confirmed.
 * `acme.sh` requires your domain to already point to the target server.

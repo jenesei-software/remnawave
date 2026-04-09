@@ -65,6 +65,8 @@ setup_ssh_key() {
 
 configure_ssh() {
   local sshd_config="/etc/ssh/sshd_config"
+  local sshd_dropin_dir="/etc/ssh/sshd_config.d"
+  local sshd_dropin_file="$sshd_dropin_dir/99-remnawave.conf"
   cp "$sshd_config" "${sshd_config}.bak.$(date +%s)"
 
   sed -i -E "s/^#?Port .*/Port $PORT_SSH/" "$sshd_config"
@@ -82,25 +84,33 @@ configure_ssh() {
     printf 'PermitEmptyPasswords no\n' >> "$sshd_config"
   fi
 
+  install -d -m 0755 "$sshd_dropin_dir"
+  cat > "$sshd_dropin_file" <<EOF
+Port $PORT_SSH
+PermitRootLogin no
+PasswordAuthentication no
+PermitEmptyPasswords no
+EOF
+
   # On some fresh/minimal images this runtime dir may be missing before sshd start.
   install -d -m 0755 /run/sshd
   sshd -t
 
-  # Ubuntu 24.04 may use ssh.socket activation; ensure it listens on PORT_SSH now.
+  # Ubuntu 24.04 may use ssh.socket activation, which can ignore sshd Port directives.
   if systemctl list-unit-files --type=socket | grep -q '^ssh.socket'; then
-    if systemctl is-enabled --quiet ssh.socket || systemctl is-active --quiet ssh.socket; then
-      install -d -m 0755 /etc/systemd/system/ssh.socket.d
-      cat > /etc/systemd/system/ssh.socket.d/override.conf <<EOF
-[Socket]
-ListenStream=
-ListenStream=$PORT_SSH
-EOF
-      systemctl daemon-reload
-      systemctl restart ssh.socket
-    fi
+    systemctl disable --now ssh.socket >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/ssh.socket.d/override.conf || true
+    systemctl daemon-reload
   fi
 
+  systemctl enable ssh >/dev/null 2>&1 || true
   systemctl restart sshd 2>/dev/null || systemctl restart ssh
+
+  if ss -tln "( sport = :$PORT_SSH )" | grep -q LISTEN; then
+    log "SSHD слушает новый порт: $PORT_SSH"
+  else
+    fail "SSHD не слушает порт $PORT_SSH после перезапуска"
+  fi
 }
 
 install_packages() {
@@ -145,6 +155,7 @@ main() {
   require_root
   require_cmd sed
   require_cmd grep
+  require_cmd ss
   load_env
   require_vars
   validate_port
@@ -158,7 +169,8 @@ main() {
   configure_ssh
   ensure_fail2ban
 
-  log "Готово. Подключайся так: ssh $USER_NAME@$SERVER_IP_V4 -p $PORT_SSH"
+  local connect_host="${SERVER_IP_V4:-${SERVER_DOMAIN:-<SERVER_IP>}}"
+  log "Готово. Подключайся так: ssh $USER_NAME@$connect_host -p $PORT_SSH"
   log "Перед выходом обязательно проверь, что новый SSH доступ работает в отдельной сессии."
 }
 
