@@ -157,7 +157,7 @@ Fill in `.env` before running any scripts.
 ### 3. Run the Ubuntu bootstrap script
 
 ```bash
-sudo bash remnawave-node/setup-ubuntu.sh
+sudo DEBIAN_FRONTEND=noninteractive bash remnawave-node/setup-ubuntu.sh
 ```
 
 After the script finishes, **do not close your current root session**.
@@ -174,7 +174,7 @@ Only continue after confirming that the new SSH login works.
 After verifying the new SSH access:
 
 ```bash
-sudo bash remnawave-node/setup-remnawave-node.sh
+sudo DEBIAN_FRONTEND=noninteractive bash remnawave-node/setup-remnawave-node.sh
 ```
 
 During this step, the script opens:
@@ -200,14 +200,14 @@ git clone https://github.com/jenesei-software/remnawave.git
 cd remnawave
 cp .env.example .env
 nano .env
-sudo bash remnawave-node/setup-ubuntu.sh
+sudo DEBIAN_FRONTEND=noninteractive bash remnawave-node/setup-ubuntu.sh
 ```
 
 After verifying the new SSH login:
 
 ```bash
 cd remnawave
-sudo bash remnawave-node/setup-remnawave-node.sh
+sudo DEBIAN_FRONTEND=noninteractive bash remnawave-node/setup-remnawave-node.sh
 sudo bash remnawave-node/check-setup.sh
 ```
 
