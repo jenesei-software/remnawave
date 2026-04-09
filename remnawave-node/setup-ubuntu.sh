@@ -82,6 +82,8 @@ configure_ssh() {
     printf 'PermitEmptyPasswords no\n' >> "$sshd_config"
   fi
 
+  # On some fresh/minimal images this runtime dir may be missing before sshd start.
+  install -d -m 0755 /run/sshd
   sshd -t
   systemctl restart sshd 2>/dev/null || systemctl restart ssh
 }
@@ -89,9 +91,16 @@ configure_ssh() {
 install_packages() {
   log "Обновляю систему и устанавливаю базовые пакеты"
   export DEBIAN_FRONTEND=noninteractive
-  apt update
-  apt upgrade -y
-  apt install -y nano fail2ban ufw less ca-certificates curl gnupg
+  export UCF_FORCE_CONFFOLD=1
+  apt-get update
+  apt-get -y \
+    -o Dpkg::Options::="--force-confdef" \
+    -o Dpkg::Options::="--force-confold" \
+    upgrade
+  apt-get -y \
+    -o Dpkg::Options::="--force-confdef" \
+    -o Dpkg::Options::="--force-confold" \
+    install nano fail2ban ufw less ca-certificates curl gnupg
 }
 
 configure_hostname() {

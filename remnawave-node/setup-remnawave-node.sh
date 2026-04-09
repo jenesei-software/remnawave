@@ -43,8 +43,14 @@ install_docker_if_missing() {
   fi
 
   log "Устанавливаю Docker"
-  apt update
-  apt install -y ca-certificates curl gnupg
+  export DEBIAN_FRONTEND=noninteractive
+  export UCF_FORCE_CONFFOLD=1
+  export NEEDRESTART_MODE=a
+  apt-get update
+  apt-get -y \
+    -o Dpkg::Options::="--force-confdef" \
+    -o Dpkg::Options::="--force-confold" \
+    install ca-certificates curl gnupg
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
   chmod a+r /etc/apt/keyrings/docker.gpg
@@ -54,8 +60,11 @@ install_docker_if_missing() {
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
     ${VERSION_CODENAME} stable" | tee /etc/apt/sources.list.d/docker.list >/dev/null
 
-  apt update
-  apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  apt-get update
+  apt-get -y \
+    -o Dpkg::Options::="--force-confdef" \
+    -o Dpkg::Options::="--force-confold" \
+    install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   systemctl enable docker
   systemctl start docker
 }
