@@ -158,7 +158,7 @@ main() {
   configure_ssh
   ensure_fail2ban
 
-  log "Готово. Подключайся так: ssh $USER_NAME@<SERVER_IP> -p $PORT_SSH"
+  log "Готово. Подключайся так: ssh $USER_NAME@$SERVER_IP_V4 -p $PORT_SSH"
   log "Перед выходом обязательно проверь, что новый SSH доступ работает в отдельной сессии."
 }
 
