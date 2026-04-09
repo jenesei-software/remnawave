@@ -81,6 +81,18 @@ check_ufw() {
     warn "Порт ноды не найден в UFW"
   fi
 
+  if ufw status | grep -q "80/tcp"; then
+    ok "HTTP порт открыт в UFW: 80/tcp"
+  else
+    warn "HTTP порт не найден в UFW: 80/tcp"
+  fi
+
+  if ufw status | grep -q "443/tcp"; then
+    ok "HTTPS порт открыт в UFW: 443/tcp"
+  else
+    warn "HTTPS порт не найден в UFW: 443/tcp"
+  fi
+
   if ufw status | grep -q "8443/tcp"; then
     ok "Порт acme.sh открыт в UFW: 8443/tcp"
   else

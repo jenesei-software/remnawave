@@ -40,6 +40,8 @@ Prepares a fresh Ubuntu server:
 Deploys a Remnawave Node:
 
 * installs Docker and Docker Compose plugin if missing
+* opens `80/tcp`
+* opens `443/tcp`
 * opens `PORT_NODE`
 * opens `8443/tcp` for `acme.sh`
 * opens ports from `PORT_ARRAY_INBOUNDS`
@@ -177,6 +179,8 @@ sudo bash remnawave-node/setup-remnawave-node.sh
 
 During this step, the script opens:
 
+* `80/tcp`
+* `443/tcp`
 * `PORT_NODE/tcp`
 * `8443/tcp` for `acme.sh`
 * all ports from `PORT_ARRAY_INBOUNDS` over TCP

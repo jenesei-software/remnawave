@@ -61,7 +61,9 @@ install_docker_if_missing() {
 }
 
 configure_ufw() {
-  log "Открываю порт панели, 8443/tcp для acme.sh и inbound порты в UFW"
+  log "Открываю 80/tcp, 443/tcp, 8443/tcp для acme.sh, порт панели и inbound порты в UFW"
+  ufw allow "80/tcp"
+  ufw allow "443/tcp"
   ufw allow "$PORT_NODE/tcp"
   ufw allow "8443/tcp"
 
@@ -96,7 +98,7 @@ issue_certificate() {
   "$HOME/.acme.sh/acme.sh" --set-default-ca --server letsencrypt
   "$HOME/.acme.sh/acme.sh" --register-account -m "$DOMAIN_MAIL" || true
 
-  log "Выпускаю сертификат для $SERVER_DOMAIN (UFW уже открыл 8443/tcp для acme.sh)"
+  log "Выпускаю сертификат для $SERVER_DOMAIN (UFW уже открыл 80/tcp и 443/tcp)"
   "$HOME/.acme.sh/acme.sh" --issue -d "$SERVER_DOMAIN" --standalone --force
   "$HOME/.acme.sh/acme.sh" --install-cert -d "$SERVER_DOMAIN" \
     --key-file "$CERT_DIR/key.pem" \
