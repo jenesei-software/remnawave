@@ -143,6 +143,7 @@ ssh root@YOUR_SERVER_IP
 Run the following commands directly on the server:
 
 ```bash
+apt update && apt install -y git
 git clone https://github.com/jenesei-software/remnawave.git
 cd remnawave
 cp .env.example .env
@@ -190,6 +191,7 @@ sudo bash remnawave-node/check-setup.sh
 
 ```bash
 ssh root@YOUR_SERVER_IP
+apt update && apt install -y git
 git clone https://github.com/jenesei-software/remnawave.git
 cd remnawave
 cp .env.example .env
