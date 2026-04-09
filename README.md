@@ -2,8 +2,6 @@
 
 Набор скриптов для быстрого подъема сервера под Remnawave Node.
 
-Основа собрана по твоим двум инструкциям: настройка Ubuntu и настройка Remnawave Node. Исходные заметки были про UFW, SSH, fail2ban, сертификаты через `acme.sh`, docker compose и запуск `remnawave/node:latest`. fileciteturn0file1 fileciteturn0file0
-
 ## Структура
 
 ```text
