@@ -5,7 +5,7 @@
 ## Структура
 
 ```text
-remnawave-quick-setup/
+remnawave/
 ├── .env.example
 ├── .gitignore
 ├── README.md
@@ -118,7 +118,7 @@ REMNAWAVE_NODE_IMAGE=remnawave/node:latest
 
 ```bash
 git clone <your-repo>
-cd remnawave-quick-setup
+cd remnawave
 cp .env.example .env
 nano .env
 ```
@@ -134,7 +134,7 @@ ssh root@YOUR_SERVER_IP
 ### 3. Запустить базовую настройку Ubuntu
 
 ```bash
-cd /path/to/remnawave-quick-setup
+cd /path/to/remnawave
 sudo bash remnawave-node/setup-ubuntu.sh
 ```
 
@@ -149,7 +149,7 @@ ssh USER_NAME@YOUR_SERVER_IP -p PORT_SSH
 Уже после входа новым пользователем или через `sudo`:
 
 ```bash
-cd /path/to/remnawave-quick-setup
+cd /path/to/remnawave
 sudo bash remnawave-node/setup-remnawave-node.sh
 ```
 
@@ -161,7 +161,7 @@ sudo bash remnawave-node/setup-remnawave-node.sh
 ### 5. Прогнать проверку
 
 ```bash
-cd /path/to/remnawave-quick-setup
+cd /path/to/remnawave
 sudo bash remnawave-node/check-setup.sh
 ```
 
