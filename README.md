@@ -252,14 +252,3 @@ systemctl status fail2ban
 * Ports from `PORT_ARRAY_INBOUNDS` are opened as **TCP** ports only.
 * If you also need UDP ports, extend the firewall rules accordingly.
 * These scripts are intended for **Ubuntu 24.04**.
-
-## Disclaimer
-
-Review all scripts before running them in production.
-
-These scripts modify SSH configuration, firewall rules, system users, and Docker services. Use them only if you understand the impact and have console or recovery access to the server.
-
-```
-
-Если хочешь, я еще могу сразу сделать более красивую GitHub-версию: покороче, чище и без повторения `Usage` + `Quick start`.
-```
