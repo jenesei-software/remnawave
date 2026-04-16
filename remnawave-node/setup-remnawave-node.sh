@@ -9,11 +9,11 @@ COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
 
 log() { echo "[$(date '+%F %T')] $*"; }
 fail() { echo "[ERROR] $*" >&2; exit 1; }
-require_root() { [[ ${EUID:-$(id -u)} -eq 0 ]] || fail "Запусти скрипт от root: sudo bash remnawave-node/setup-remnawave-node.sh"; }
-require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "Не найдена команда: $1"; }
+require_root() { [[ ${EUID:-$(id -u)} -eq 0 ]] || fail "Run as root: sudo bash remnawave-node/setup-remnawave-node.sh"; }
+require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "Command not found: $1"; }
 
 load_env() {
-  [[ -f "$ENV_FILE" ]] || fail "Файл окружения не найден: $ENV_FILE"
+  [[ -f "$ENV_FILE" ]] || fail "Environment file not found: $ENV_FILE"
   set -a
   # shellcheck disable=SC1090
   source "$ENV_FILE"
@@ -26,22 +26,41 @@ require_vars() {
     [[ -n "${!var:-}" ]] || missing+=("$var")
   done
   if (( ${#missing[@]} > 0 )); then
-    fail "Не заполнены переменные в .env: ${missing[*]}"
+    fail "Missing required variables in .env: ${missing[*]}"
   fi
 }
 
 validate_port() {
-  [[ "$PORT_NODE" =~ ^[0-9]+$ ]] || fail "PORT_NODE должен быть числом"
-  (( PORT_NODE >= 1 && PORT_NODE <= 65535 )) || fail "PORT_NODE должен быть в диапазоне 1-65535"
+  [[ "$PORT_NODE" =~ ^[0-9]+$ ]] || fail "PORT_NODE must be numeric"
+  (( PORT_NODE >= 1 && PORT_NODE <= 65535 )) || fail "PORT_NODE must be between 1 and 65535"
+}
+
+disable_ipv6() {
+  local sysctl_file="/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf"
+
+  log "Disabling IPv6 on the host"
+  cat > "$sysctl_file" <<'EOF'
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+EOF
+
+  sysctl --system >/dev/null
+
+  [[ "$(sysctl -n net.ipv6.conf.all.disable_ipv6)" == "1" ]] || fail "Failed to disable IPv6 for net.ipv6.conf.all.disable_ipv6"
+  [[ "$(sysctl -n net.ipv6.conf.default.disable_ipv6)" == "1" ]] || fail "Failed to disable IPv6 for net.ipv6.conf.default.disable_ipv6"
+  [[ "$(sysctl -n net.ipv6.conf.lo.disable_ipv6)" == "1" ]] || fail "Failed to disable IPv6 for net.ipv6.conf.lo.disable_ipv6"
+
+  log "IPv6 has been disabled"
 }
 
 install_docker_if_missing() {
   if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-    log "Docker и docker compose уже установлены"
+    log "Docker and docker compose are already installed"
     return
   fi
 
-  log "Устанавливаю Docker"
+  log "Installing Docker"
   export DEBIAN_FRONTEND=noninteractive
   export UCF_FORCE_CONFFOLD=1
   export NEEDRESTART_MODE=a
@@ -53,7 +72,7 @@ install_docker_if_missing() {
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
   chmod a+r /etc/apt/keyrings/docker.gpg
-  
+
   . /etc/os-release
   echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
@@ -69,7 +88,7 @@ install_docker_if_missing() {
 }
 
 configure_ufw() {
-  log "Открываю 80/tcp, 443/tcp, 8443/tcp для acme.sh, порт панели и inbound порты в UFW"
+  log "Opening 80/tcp, 443/tcp, 8443/tcp, the node port, and inbound ports in UFW"
   ufw allow "80/tcp"
   ufw allow "443/tcp"
   ufw allow "$PORT_NODE/tcp"
@@ -80,7 +99,7 @@ configure_ufw() {
     for raw_port in "${ports[@]}"; do
       port="$(echo "$raw_port" | xargs)"
       [[ -z "$port" ]] && continue
-      [[ "$port" =~ ^[0-9]+$ ]] || fail "Некорректный порт в PORT_ARRAY_INBOUNDS: $port"
+      [[ "$port" =~ ^[0-9]+$ ]] || fail "Invalid port in PORT_ARRAY_INBOUNDS: $port"
       ufw allow "$port/tcp"
     done
   fi
@@ -90,11 +109,11 @@ configure_ufw() {
 
 install_acme_if_missing() {
   if [[ -x "$HOME/.acme.sh/acme.sh" ]]; then
-    log "acme.sh уже установлен"
+    log "acme.sh is already installed"
     return
   fi
 
-  log "Устанавливаю acme.sh"
+  log "Installing acme.sh"
   curl https://get.acme.sh | sh
 }
 
@@ -106,7 +125,7 @@ issue_certificate() {
   "$HOME/.acme.sh/acme.sh" --set-default-ca --server letsencrypt
   "$HOME/.acme.sh/acme.sh" --register-account -m "$DOMAIN_MAIL" || true
 
-  log "Выпускаю сертификат для $SERVER_DOMAIN (UFW уже открыл 80/tcp и 443/tcp)"
+  log "Issuing a certificate for $SERVER_DOMAIN"
   "$HOME/.acme.sh/acme.sh" --issue -d "$SERVER_DOMAIN" --standalone --force
   "$HOME/.acme.sh/acme.sh" --install-cert -d "$SERVER_DOMAIN" \
     --key-file "$CERT_DIR/key.pem" \
@@ -152,6 +171,7 @@ main() {
   require_cmd curl
   require_cmd ufw
   require_cmd gpg
+  require_cmd sysctl
   load_env
   require_vars
   validate_port
@@ -160,10 +180,11 @@ main() {
   configure_ufw
   install_acme_if_missing
   issue_certificate
+  disable_ipv6
   write_compose
   start_stack
 
-  log "Готово. Проверка логов: cd $COMPOSE_DIR && docker compose logs -f"
+  log "Done. Logs: cd $COMPOSE_DIR && docker compose logs -f"
 }
 
 main "$@"

@@ -24,78 +24,95 @@ load_env() {
     source "$ENV_FILE"
     set +a
   else
-    warn "Файл .env не найден: $ENV_FILE"
+    warn "Environment file not found: $ENV_FILE"
   fi
 }
 
 check_cmd() {
-  if command -v "$1" >/dev/null 2>&1; then ok "Команда найдена: $1"; else err "Команда не найдена: $1"; fi
+  if command -v "$1" >/dev/null 2>&1; then
+    ok "Command found: $1"
+  else
+    err "Command not found: $1"
+  fi
 }
 
 check_system() {
-  section "Базовая система"
+  section "Base system"
   check_cmd ssh
   check_cmd ufw
   check_cmd fail2ban-client
   check_cmd docker
   check_cmd ss
+  check_cmd sysctl
 
-  systemctl is-active --quiet fail2ban && ok "Сервис fail2ban: active" || err "Сервис fail2ban: NOT active"
-  systemctl is-active --quiet docker && ok "Сервис docker: active" || err "Сервис docker: NOT active"
-  systemctl is-active --quiet ssh && ok "Сервис ssh: active" || systemctl is-active --quiet sshd && ok "Сервис sshd: active" || err "Сервис ssh/sshd: NOT active"
+  systemctl is-active --quiet fail2ban && ok "Service fail2ban: active" || err "Service fail2ban: NOT active"
+  systemctl is-active --quiet docker && ok "Service docker: active" || err "Service docker: NOT active"
+  systemctl is-active --quiet ssh && ok "Service ssh: active" || systemctl is-active --quiet sshd && ok "Service sshd: active" || err "Service ssh/sshd: NOT active"
+}
+
+check_ipv6() {
+  section "IPv6"
+
+  if [[ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
+     [[ "$(sysctl -n net.ipv6.conf.default.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
+     [[ "$(sysctl -n net.ipv6.conf.lo.disable_ipv6 2>/dev/null || echo 0)" == "1" ]]; then
+    ok "IPv6 is disabled on the host"
+  else
+    warn "IPv6 is still enabled on the host"
+  fi
 }
 
 check_ssh() {
   section "SSH"
   local sshd_config="/etc/ssh/sshd_config"
-  [[ -f "$sshd_config" ]] || { err "Не найден $sshd_config"; return; }
+  [[ -f "$sshd_config" ]] || { err "File not found: $sshd_config"; return; }
 
   if [[ -n "${PORT_SSH:-}" ]] && grep -Eq "^Port ${PORT_SSH}$" "$sshd_config"; then
-    ok "SSH порт настроен: $PORT_SSH"
+    ok "SSH port is configured: $PORT_SSH"
   else
-    warn "Не удалось подтвердить PORT_SSH из .env"
+    warn "Could not confirm PORT_SSH from .env"
   fi
 
-  grep -Eq '^PermitRootLogin no$' "$sshd_config" && ok "Root login отключен" || warn "PermitRootLogin no не найден"
-  grep -Eq '^PasswordAuthentication no$' "$sshd_config" && ok "PasswordAuthentication отключен" || warn "PasswordAuthentication no не найден"
+  grep -Eq '^PermitRootLogin no$' "$sshd_config" && ok "Root login is disabled" || warn "PermitRootLogin no not found"
+  grep -Eq '^PasswordAuthentication no$' "$sshd_config" && ok "Password authentication is disabled" || warn "PasswordAuthentication no not found"
 }
 
 check_ufw() {
   section "UFW"
   if ufw status | grep -q "Status: active"; then
-    ok "UFW активен"
+    ok "UFW is active"
   else
-    err "UFW не активен"
+    err "UFW is not active"
   fi
 
   if [[ -n "${PORT_SSH:-}" ]] && ufw status | grep -q "$PORT_SSH/tcp"; then
-    ok "SSH порт открыт в UFW: $PORT_SSH/tcp"
+    ok "SSH port is open in UFW: $PORT_SSH/tcp"
   else
-    warn "SSH порт не найден в UFW"
+    warn "SSH port was not found in UFW"
   fi
 
   if [[ -n "${PORT_NODE:-}" ]] && ufw status | grep -q "$PORT_NODE/tcp"; then
-    ok "Порт ноды открыт в UFW: $PORT_NODE/tcp"
+    ok "Node port is open in UFW: $PORT_NODE/tcp"
   else
-    warn "Порт ноды не найден в UFW"
+    warn "Node port was not found in UFW"
   fi
 
   if ufw status | grep -q "80/tcp"; then
-    ok "HTTP порт открыт в UFW: 80/tcp"
+    ok "HTTP port is open in UFW: 80/tcp"
   else
-    warn "HTTP порт не найден в UFW: 80/tcp"
+    warn "HTTP port was not found in UFW: 80/tcp"
   fi
 
   if ufw status | grep -q "443/tcp"; then
-    ok "HTTPS порт открыт в UFW: 443/tcp"
+    ok "HTTPS port is open in UFW: 443/tcp"
   else
-    warn "HTTPS порт не найден в UFW: 443/tcp"
+    warn "HTTPS port was not found in UFW: 443/tcp"
   fi
 
   if ufw status | grep -q "8443/tcp"; then
-    ok "Порт acme.sh открыт в UFW: 8443/tcp"
+    ok "acme.sh port is open in UFW: 8443/tcp"
   else
-    warn "Порт acme.sh не найден в UFW: 8443/tcp"
+    warn "acme.sh port was not found in UFW: 8443/tcp"
   fi
 
   if [[ -n "${PORT_ARRAY_INBOUNDS:-}" ]]; then
@@ -104,47 +121,48 @@ check_ufw() {
       port="$(echo "$raw_port" | xargs)"
       [[ -z "$port" ]] && continue
       if ufw status | grep -q "$port/tcp"; then
-        ok "Inbound порт открыт: $port/tcp"
+        ok "Inbound port is open: $port/tcp"
       else
-        warn "Inbound порт не найден: $port/tcp"
+        warn "Inbound port was not found: $port/tcp"
       fi
     done
   fi
 
   echo
-  info "Все открытые правила UFW:"
+  info "All UFW rules:"
   ufw status numbered || true
 }
 
 check_listening_ports() {
-  section "Слушающие порты на сервере"
-  ss -tulpn || warn "Не удалось получить список слушающих портов через ss"
+  section "Listening ports"
+  ss -tulpn || warn "Could not list listening ports with ss"
 }
 
 check_certs() {
-  section "Сертификаты"
-  [[ -f "$CERT_DIR/cert.pem" ]] && ok "Найден cert.pem" || err "Не найден $CERT_DIR/cert.pem"
-  [[ -f "$CERT_DIR/key.pem" ]] && ok "Найден key.pem" || err "Не найден $CERT_DIR/key.pem"
+  section "Certificates"
+  [[ -f "$CERT_DIR/cert.pem" ]] && ok "Found cert.pem" || err "Missing $CERT_DIR/cert.pem"
+  [[ -f "$CERT_DIR/key.pem" ]] && ok "Found key.pem" || err "Missing $CERT_DIR/key.pem"
 }
 
 check_docker_compose() {
   section "Docker / Remnawave Node"
-  [[ -f "$COMPOSE_DIR/docker-compose.yml" ]] && ok "Найден docker-compose.yml" || err "Не найден $COMPOSE_DIR/docker-compose.yml"
+  [[ -f "$COMPOSE_DIR/docker-compose.yml" ]] && ok "Found docker-compose.yml" || err "Missing $COMPOSE_DIR/docker-compose.yml"
 
   if docker ps --format '{{.Names}}' | grep -qx 'remnanode'; then
-    ok "Контейнер remnanode запущен"
+    ok "Container remnanode is running"
   else
-    err "Контейнер remnanode не запущен"
+    err "Container remnanode is not running"
   fi
 
   if command -v docker >/dev/null 2>&1 && [[ -f "$COMPOSE_DIR/docker-compose.yml" ]]; then
-    (cd "$COMPOSE_DIR" && docker compose ps) || warn "Не удалось получить docker compose ps"
+    (cd "$COMPOSE_DIR" && docker compose ps) || warn "Could not run docker compose ps"
   fi
 }
 
 main() {
   load_env
   check_system
+  check_ipv6
   check_ssh
   check_ufw
   check_listening_ports

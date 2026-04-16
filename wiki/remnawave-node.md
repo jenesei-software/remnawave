@@ -38,6 +38,7 @@ Prepares a fresh Ubuntu server:
 * adds an SSH public key
 * updates system packages
 * installs `nano`, `fail2ban`, `ufw`, and `less`
+* checks the current IPv6 status
 * changes the SSH port
 * disables SSH login for `root`
 * disables password-based SSH authentication
@@ -56,6 +57,7 @@ Deploys a Remnawave Node:
 * opens ports from `PORT_ARRAY_INBOUNDS`
 * installs `acme.sh`
 * issues a Let's Encrypt certificate for `SERVER_DOMAIN`
+* disables IPv6 on the host
 * stores certificates in `/etc/ssl/remnawave-node`
 * creates `/opt/remnanode/docker-compose.yml`
 * starts the `remnanode` container
@@ -65,6 +67,7 @@ Deploys a Remnawave Node:
 Verifies the final setup:
 
 * checks required commands and services
+* checks whether IPv6 is disabled on the host
 * shows `fail2ban`, `docker`, and UFW status
 * shows SSH-related configuration
 * prints service health information
@@ -260,6 +263,7 @@ systemctl status fail2ban
 * `acme.sh` requires your domain to already point to the target server.
 * The required validation port must be reachable from the public internet.
 * This project opens `8443/tcp` as part of the certificate automation flow.
+* `setup-remnawave-node.sh` disables IPv6 on the host, so do not leave active AAAA DNS records pointing to this server unless you manage that separately.
 * Ports from `PORT_ARRAY_INBOUNDS` are opened as **TCP** ports only.
 * If you also need UDP ports, extend the firewall rules accordingly.
 * These scripts are intended for **Ubuntu 24.04**.
