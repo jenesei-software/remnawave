@@ -6,11 +6,11 @@ ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
 
 log() { echo "[$(date '+%F %T')] $*"; }
 fail() { echo "[ERROR] $*" >&2; exit 1; }
-require_root() { [[ ${EUID:-$(id -u)} -eq 0 ]] || fail "Запусти скрипт от root: sudo bash remnawave-node/setup-ubuntu.sh"; }
-require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "Не найдена команда: $1"; }
+require_root() { [[ ${EUID:-$(id -u)} -eq 0 ]] || fail "Run as root: sudo bash remnawave-panel/setup-ubuntu.sh"; }
+require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "Command not found: $1"; }
 
 load_env() {
-  [[ -f "$ENV_FILE" ]] || fail "Файл окружения не найден: $ENV_FILE"
+  [[ -f "$ENV_FILE" ]] || fail "Environment file not found: $ENV_FILE"
   set -a
   # shellcheck disable=SC1090
   source "$ENV_FILE"
@@ -23,20 +23,20 @@ require_vars() {
     [[ -n "${!var:-}" ]] || missing+=("$var")
   done
   if (( ${#missing[@]} > 0 )); then
-    fail "Не заполнены переменные в .env: ${missing[*]}"
+    fail "Missing required variables in $ENV_FILE: ${missing[*]}"
   fi
 }
 
 validate_port() {
-  [[ "$PORT_SSH" =~ ^[0-9]+$ ]] || fail "PORT_SSH должен быть числом"
-  (( PORT_SSH >= 10001 && PORT_SSH <= 65535 )) || fail "PORT_SSH должен быть в диапазоне 10001-65535"
+  [[ "$PORT_SSH" =~ ^[0-9]+$ ]] || fail "PORT_SSH must be numeric"
+  (( PORT_SSH >= 10001 && PORT_SSH <= 65535 )) || fail "PORT_SSH must be between 10001 and 65535"
 }
 
 create_or_update_user() {
   if id "$USER_NAME" >/dev/null 2>&1; then
-    log "Пользователь $USER_NAME уже существует"
+    log "User already exists: $USER_NAME"
   else
-    log "Создаю пользователя $USER_NAME"
+    log "Creating user: $USER_NAME"
     adduser --disabled-password --gecos "" "$USER_NAME"
   fi
 
@@ -55,19 +55,19 @@ setup_ssh_key() {
   chown -R "$USER_NAME:$USER_NAME" "$ssh_dir"
 
   if ! grep -Fqx "$SSH_PUB" "$auth_keys"; then
-    log "Добавляю публичный SSH ключ для $USER_NAME"
+    log "Adding SSH public key for $USER_NAME"
     printf '%s\n' "$SSH_PUB" >> "$auth_keys"
   else
-    log "SSH ключ уже добавлен"
+    log "SSH public key already present"
   fi
 }
 
 configure_ssh() {
   local sshd_config="/etc/ssh/sshd_config"
   local sshd_dropin_dir="/etc/ssh/sshd_config.d"
-  local sshd_dropin_file="$sshd_dropin_dir/99-remnawave.conf"
-  cp "$sshd_config" "${sshd_config}.bak.$(date +%s)"
+  local sshd_dropin_file="$sshd_dropin_dir/99-remnawave-panel.conf"
 
+  cp "$sshd_config" "${sshd_config}.bak.$(date +%s)"
   sed -i -E "s/^#?Port .*/Port $PORT_SSH/" "$sshd_config"
   sed -i -E "s/^#?PermitRootLogin .*/PermitRootLogin no/" "$sshd_config"
 
@@ -91,11 +91,9 @@ PasswordAuthentication no
 PermitEmptyPasswords no
 EOF
 
-  # On some fresh/minimal images this runtime dir may be missing before sshd start.
   install -d -m 0755 /run/sshd
   sshd -t
 
-  # Ubuntu 24.04 may use ssh.socket activation, which can ignore sshd Port directives.
   if systemctl list-unit-files --type=socket | grep -q '^ssh.socket'; then
     systemctl disable --now ssh.socket >/dev/null 2>&1 || true
     rm -f /etc/systemd/system/ssh.socket.d/override.conf || true
@@ -106,14 +104,14 @@ EOF
   systemctl restart sshd 2>/dev/null || systemctl restart ssh
 
   if ss -tln "( sport = :$PORT_SSH )" | grep -q LISTEN; then
-    log "SSHD слушает новый порт: $PORT_SSH"
+    log "SSHD is listening on port $PORT_SSH"
   else
-    fail "SSHD не слушает порт $PORT_SSH после перезапуска"
+    fail "SSHD is not listening on port $PORT_SSH after restart"
   fi
 }
 
 install_packages() {
-  log "Обновляю систему и устанавливаю базовые пакеты"
+  log "Updating the system and installing base packages"
   export DEBIAN_FRONTEND=noninteractive
   export UCF_FORCE_CONFFOLD=1
   export NEEDRESTART_MODE=a
@@ -125,21 +123,21 @@ install_packages() {
   apt-get -y \
     -o Dpkg::Options::="--force-confdef" \
     -o Dpkg::Options::="--force-confold" \
-    install nano fail2ban ufw less ca-certificates curl gnupg
+    install nano fail2ban ufw less ca-certificates curl openssl
 }
 
 configure_hostname() {
-  log "Устанавливаю hostname: $SERVER_NAME"
+  log "Setting hostname: $SERVER_NAME"
   hostnamectl set-hostname "$SERVER_NAME"
 }
 
 configure_root_password() {
-  log "Обновляю пароль root"
+  log "Updating root password"
   echo "root:$ROOT_PASSWORD" | chpasswd
 }
 
 configure_ufw() {
-  log "Настраиваю UFW"
+  log "Configuring UFW"
   ufw allow "$PORT_SSH/tcp"
   ufw --force enable
   ufw reload
@@ -168,9 +166,9 @@ main() {
   configure_ssh
   ensure_fail2ban
 
-  local connect_host="${SERVER_IP_V4:-${SERVER_DOMAIN:-<SERVER_IP>}}"
-  log "Готово. Подключайся так: ssh $USER_NAME@$connect_host -p $PORT_SSH"
-  log "Перед выходом обязательно проверь, что новый SSH доступ работает в отдельной сессии."
+  local connect_host="${SERVER_IP_V4:-${SERVER_DOMAIN:-${PANEL_DOMAIN:-<SERVER_IP>}}}"
+  log "Done. Test the new SSH login with: ssh $USER_NAME@$connect_host -p $PORT_SSH"
+  log "Keep the current root session open until the new SSH session works."
 }
 
 main "$@"

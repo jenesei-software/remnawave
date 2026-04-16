@@ -2,8 +2,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
+ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
 COMPOSE_DIR="/opt/remnanode"
 CERT_DIR="/etc/ssl/remnawave-node"
 
