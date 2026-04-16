@@ -14,8 +14,18 @@ NGINX_PRIVKEY_FILE="$NGINX_DIR/privkey.key"
 PANEL_COMPOSE_URL="https://raw.githubusercontent.com/remnawave/backend/refs/heads/main/docker-compose-prod.yml"
 PANEL_ENV_URL="https://raw.githubusercontent.com/remnawave/backend/refs/heads/main/.env.sample"
 
-log() { echo "[$(date '+%F %T')] $*"; }
-fail() { echo "[ERROR] $*" >&2; exit 1; }
+LOG_COLOR='\033[1;36m'
+LOG_RESET='\033[0m'
+
+timestamp() { date '+%F %T'; }
+log_line() {
+  local level="$1"
+  shift
+  printf '%b[%s] %-7s%b %s\n' "$LOG_COLOR" "$(timestamp)" "$level" "$LOG_RESET" "$*"
+}
+
+log() { log_line "INFO" "$*"; }
+fail() { log_line "ERROR" "$*" >&2; exit 1; }
 require_root() { [[ ${EUID:-$(id -u)} -eq 0 ]] || fail "Run as root: sudo bash remnawave-panel/setup-remnawave-panel.sh"; }
 require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "Command not found: $1"; }
 

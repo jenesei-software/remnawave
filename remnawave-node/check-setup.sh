@@ -6,16 +6,21 @@ ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
 COMPOSE_DIR="/opt/remnanode"
 CERT_DIR="/etc/ssl/remnawave-node"
 
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+LOG_COLOR='\033[1;36m'
+LOG_RESET='\033[0m'
 
-ok() { echo -e "${GREEN}[OK]${NC} $*"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
-err() { echo -e "${RED}[FAIL]${NC} $*"; }
-info() { echo -e "[INFO] $*"; }
-section() { echo; echo "==== $* ===="; }
+timestamp() { date '+%F %T'; }
+log_line() {
+  local level="$1"
+  shift
+  printf '%b[%s] %-7s%b %s\n' "$LOG_COLOR" "$(timestamp)" "$level" "$LOG_RESET" "$*"
+}
+
+ok() { log_line "OK" "$*"; }
+warn() { log_line "WARN" "$*"; }
+err() { log_line "ERROR" "$*"; }
+info() { log_line "INFO" "$*"; }
+section() { echo; log_line "SECTION" "$*"; }
 
 load_env() {
   if [[ -f "$ENV_FILE" ]]; then
