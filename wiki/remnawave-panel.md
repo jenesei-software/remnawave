@@ -376,13 +376,50 @@ sudo bash remnawave-panel/setup-subscription-page.sh
 sudo bash remnawave-panel/check-setup.sh
 ```
 
+## Quick links
+
+### Repository files
+
+* [remnawave-panel/.env.example](../remnawave-panel/.env.example)
+* [remnawave-panel/setup-ubuntu.sh](../remnawave-panel/setup-ubuntu.sh)
+* [remnawave-panel/setup-remnawave-panel.sh](../remnawave-panel/setup-remnawave-panel.sh)
+* [remnawave-panel/setup-subscription-page.sh](../remnawave-panel/setup-subscription-page.sh)
+* [remnawave-panel/check-setup.sh](../remnawave-panel/check-setup.sh)
+
+### Important files on the server
+
+* `/opt/remnawave/.env` - runtime environment for the panel stack
+* `/opt/remnawave/docker-compose.yml` - main Remnawave Panel compose file
+* `/opt/remnawave/nginx/nginx.conf` - Nginx virtual hosts for panel and subscription page
+* `/opt/remnawave/nginx/docker-compose.yml` - Nginx container definition
+* `/opt/remnawave/nginx/fullchain.pem` - TLS certificate for `PANEL_DOMAIN`
+* `/opt/remnawave/nginx/privkey.key` - TLS private key for `PANEL_DOMAIN`
+* `/opt/remnawave/nginx/subdomain_fullchain.pem` - TLS certificate for `SUBSCRIPTION_PAGE_DOMAIN`
+* `/opt/remnawave/nginx/subdomain_privkey.key` - TLS private key for `SUBSCRIPTION_PAGE_DOMAIN`
+* `/opt/remnawave/subscription/.env` - bundled subscription-page runtime environment
+* `/opt/remnawave/subscription/docker-compose.yml` - bundled subscription-page compose file
+
 ## Useful commands
+
+### Recreate the full panel stack
+
+```bash
+cd /opt/remnawave
+docker compose down
+docker compose up -d
+```
 
 ### Show panel logs
 
 ```bash
 cd /opt/remnawave
 docker compose logs -f -t
+```
+
+### Open the panel runtime environment
+
+```bash
+nano /opt/remnawave/.env
 ```
 
 ### Show bundled subscription-page logs
@@ -392,11 +429,39 @@ cd /opt/remnawave/subscription
 docker compose logs -f -t
 ```
 
+### Recreate the bundled subscription-page
+
+```bash
+cd /opt/remnawave/subscription
+docker compose down
+docker compose up -d
+```
+
+### Open the bundled subscription-page environment
+
+```bash
+nano /opt/remnawave/subscription/.env
+```
+
 ### Show Nginx logs
 
 ```bash
 cd /opt/remnawave/nginx
 docker compose logs -f -t
+```
+
+### Recreate Nginx
+
+```bash
+cd /opt/remnawave/nginx
+docker compose down
+docker compose up -d
+```
+
+### Open the active Nginx config
+
+```bash
+nano /opt/remnawave/nginx/nginx.conf
 ```
 
 ### Recreate only the Remnawave container after editing `/opt/remnawave/.env`

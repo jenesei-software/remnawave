@@ -26,6 +26,8 @@ load_env() {
   else
     warn "Environment file not found: $ENV_FILE"
   fi
+
+  DISABLE_IPV6="${DISABLE_IPV6:-true}"
 }
 
 check_cmd() {
@@ -53,12 +55,22 @@ check_system() {
 check_ipv6() {
   section "IPv6"
 
-  if [[ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
-     [[ "$(sysctl -n net.ipv6.conf.default.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
-     [[ "$(sysctl -n net.ipv6.conf.lo.disable_ipv6 2>/dev/null || echo 0)" == "1" ]]; then
-    ok "IPv6 is disabled on the host"
+  if [[ "$DISABLE_IPV6" == "true" ]]; then
+    if [[ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
+       [[ "$(sysctl -n net.ipv6.conf.default.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
+       [[ "$(sysctl -n net.ipv6.conf.lo.disable_ipv6 2>/dev/null || echo 0)" == "1" ]]; then
+      ok "IPv6 is disabled on the host"
+    else
+      warn "IPv6 is still enabled on the host, but DISABLE_IPV6=true in .env"
+    fi
   else
-    warn "IPv6 is still enabled on the host"
+    if [[ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
+       [[ "$(sysctl -n net.ipv6.conf.default.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
+       [[ "$(sysctl -n net.ipv6.conf.lo.disable_ipv6 2>/dev/null || echo 0)" == "1" ]]; then
+      ok "IPv6 is disabled on the host, even though DISABLE_IPV6=false"
+    else
+      ok "IPv6 is enabled on the host as configured by DISABLE_IPV6=false"
+    fi
   fi
 }
 

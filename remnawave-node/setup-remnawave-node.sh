@@ -35,6 +35,11 @@ validate_port() {
   (( PORT_NODE >= 1 && PORT_NODE <= 65535 )) || fail "PORT_NODE must be between 1 and 65535"
 }
 
+validate_bool() {
+  local value="$1"
+  [[ "$value" == "true" || "$value" == "false" ]] || fail "Boolean value must be true or false"
+}
+
 disable_ipv6() {
   local sysctl_file="/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf"
 
@@ -175,12 +180,18 @@ main() {
   load_env
   require_vars
   validate_port
+  DISABLE_IPV6="${DISABLE_IPV6:-true}"
+  validate_bool "$DISABLE_IPV6"
 
   install_docker_if_missing
   configure_ufw
   install_acme_if_missing
   issue_certificate
-  disable_ipv6
+  if [[ "$DISABLE_IPV6" == "true" ]]; then
+    disable_ipv6
+  else
+    log "Skipping IPv6 disable because DISABLE_IPV6=false"
+  fi
   write_compose
   start_stack
 

@@ -32,16 +32,29 @@ validate_port() {
   (( PORT_SSH >= 10001 && PORT_SSH <= 65535 )) || fail "PORT_SSH must be between 10001 and 65535"
 }
 
+validate_bool() {
+  local value="$1"
+  [[ "$value" == "true" || "$value" == "false" ]] || fail "Boolean value must be true or false"
+}
+
 check_ipv6_status() {
   local ipv6_all ipv6_default
 
   ipv6_all="$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo unknown)"
   ipv6_default="$(sysctl -n net.ipv6.conf.default.disable_ipv6 2>/dev/null || echo unknown)"
 
-  if [[ "$ipv6_all" == "1" && "$ipv6_default" == "1" ]]; then
-    log "IPv6 is already disabled on this server"
+  if [[ "$DISABLE_IPV6" == "true" ]]; then
+    if [[ "$ipv6_all" == "1" && "$ipv6_default" == "1" ]]; then
+      log "IPv6 is already disabled on this server"
+    else
+      log "IPv6 is currently enabled. remnawave-node/setup-remnawave-node.sh will disable it before starting the node"
+    fi
   else
-    log "IPv6 is currently enabled. remnawave-node/setup-remnawave-node.sh will disable it before starting the node"
+    if [[ "$ipv6_all" == "1" && "$ipv6_default" == "1" ]]; then
+      log "IPv6 is already disabled on this server, but DISABLE_IPV6=false in .env"
+    else
+      log "IPv6 will stay enabled because DISABLE_IPV6=false in .env"
+    fi
   fi
 }
 
@@ -171,6 +184,8 @@ main() {
   load_env
   require_vars
   validate_port
+  DISABLE_IPV6="${DISABLE_IPV6:-true}"
+  validate_bool "$DISABLE_IPV6"
   check_ipv6_status
 
   configure_hostname

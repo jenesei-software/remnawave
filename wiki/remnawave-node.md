@@ -57,7 +57,7 @@ Deploys a Remnawave Node:
 * opens ports from `PORT_ARRAY_INBOUNDS`
 * installs `acme.sh`
 * issues a Let's Encrypt certificate for `SERVER_DOMAIN`
-* disables IPv6 on the host
+* optionally disables IPv6 on the host
 * stores certificates in `/etc/ssl/remnawave-node`
 * creates `/opt/remnanode/docker-compose.yml`
 * starts the `remnanode` container
@@ -121,6 +121,7 @@ SERVER_DOMAIN=
 DOMAIN_MAIL=
 PORT_NODE=
 NODE_SECRET=
+DISABLE_IPV6=true
 PORT_ARRAY_INBOUNDS=
 REMNAWAVE_NODE_IMAGE=remnawave/node:latest
 ```
@@ -140,9 +141,12 @@ SERVER_DOMAIN=node.example.com
 DOMAIN_MAIL=admin@example.com
 PORT_NODE=22222
 NODE_SECRET=very-secret-key
+DISABLE_IPV6=true
 PORT_ARRAY_INBOUNDS=30000,30001
 REMNAWAVE_NODE_IMAGE=remnawave/node:latest
 ```
+
+`DISABLE_IPV6` controls whether `setup-remnawave-node.sh` turns IPv6 off on the host. Set it to `false` if you want to keep IPv6 enabled.
 
 ## Usage
 
@@ -225,7 +229,31 @@ sudo bash remnawave-node/setup-remnawave-node.sh
 sudo bash remnawave-node/check-setup.sh
 ```
 
+## Quick links
+
+### Repository files
+
+* [remnawave-node/.env.example](../remnawave-node/.env.example)
+* [remnawave-node/setup-ubuntu.sh](../remnawave-node/setup-ubuntu.sh)
+* [remnawave-node/setup-remnawave-node.sh](../remnawave-node/setup-remnawave-node.sh)
+* [remnawave-node/check-setup.sh](../remnawave-node/check-setup.sh)
+
+### Important files on the server
+
+* `/opt/remnanode/docker-compose.yml` - active Remnawave Node compose file
+* `/etc/ssl/remnawave-node/cert.pem` - node TLS certificate
+* `/etc/ssl/remnawave-node/key.pem` - node TLS private key
+* `/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf` - IPv6 disable config when `DISABLE_IPV6=true`
+
 ## Useful commands
+
+### Recreate the node stack
+
+```bash
+cd /opt/remnanode
+docker compose down
+docker compose up -d
+```
 
 ### View container logs
 
@@ -234,11 +262,36 @@ cd /opt/remnanode
 docker compose logs -f
 ```
 
+### Restart only the node container
+
+```bash
+cd /opt/remnanode
+docker compose up -d --force-recreate remnanode
+```
+
 ### Stop the node
 
 ```bash
 cd /opt/remnanode
 docker compose down
+```
+
+### Open the compose file
+
+```bash
+nano /opt/remnanode/docker-compose.yml
+```
+
+### Check certificates
+
+```bash
+ls -l /etc/ssl/remnawave-node
+```
+
+### Open the IPv6 sysctl file
+
+```bash
+nano /etc/sysctl.d/99-remnawave-node-disable-ipv6.conf
 ```
 
 ### Show open firewall rules
@@ -263,7 +316,8 @@ systemctl status fail2ban
 * `acme.sh` requires your domain to already point to the target server.
 * The required validation port must be reachable from the public internet.
 * This project opens `8443/tcp` as part of the certificate automation flow.
-* `setup-remnawave-node.sh` disables IPv6 on the host, so do not leave active AAAA DNS records pointing to this server unless you manage that separately.
+* `setup-remnawave-node.sh` disables IPv6 only when `DISABLE_IPV6=true` in `.env`.
+* If you disable IPv6 through `DISABLE_IPV6=true`, do not leave active AAAA DNS records pointing to this server unless you manage that separately.
 * Ports from `PORT_ARRAY_INBOUNDS` are opened as **TCP** ports only.
 * If you also need UDP ports, extend the firewall rules accordingly.
 * These scripts are intended for **Ubuntu 24.04**.
