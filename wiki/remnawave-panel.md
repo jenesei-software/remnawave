@@ -136,6 +136,13 @@ nano remnawave-panel/.env
 
 The scripts load `remnawave-panel/.env` by default.
 
+The bundled `.env.example` is split into:
+
+* required values for `setup-ubuntu.sh`
+* required values for `setup-remnawave-panel.sh`
+* required values for `setup-subscription-page.sh`
+* optional and advanced values you can leave as-is at first
+
 ## `.env` variables
 
 ### Ubuntu setup
@@ -185,6 +192,7 @@ CADDY_AUTH_API_TOKEN=
 * `DOMAIN_MAIL` is required for `acme.sh` certificate issuance.
 * `SUBSCRIPTION_PAGE_DOMAIN` is the public HTTPS domain for the bundled subscription page.
 * `REMNAWAVE_API_TOKEN` is created in the Remnawave dashboard after the first admin login.
+* In `remnawave-panel/.env.example`, all fields marked `REQUIRED` are the ones you must fill in.
 * `SUB_PUBLIC_DOMAIN` can be left empty. If `SUBSCRIPTION_PAGE_DOMAIN` is set, `setup-subscription-page.sh` will use it automatically.
 * If `CUSTOM_SUB_PREFIX` is set, `setup-subscription-page.sh` appends it to `SUB_PUBLIC_DOMAIN`.
 * The deployed panel runtime file lives at `/opt/remnawave/.env`.
