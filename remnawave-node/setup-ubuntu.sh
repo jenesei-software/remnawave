@@ -3,6 +3,9 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
+IPV6_DISABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf"
+IPV6_ENABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-enable-ipv6.conf"
+UFW_DEFAULTS_FILE="/etc/default/ufw"
 
 LOG_COLOR='\033[1;36m'
 LOG_RESET='\033[0m'
@@ -47,6 +50,50 @@ validate_bool() {
   [[ "$value" == "true" || "$value" == "false" ]] || fail "Boolean value must be true or false"
 }
 
+ensure_ufw_ipv6_enabled() {
+  if [[ ! -f "$UFW_DEFAULTS_FILE" ]]; then
+    log "UFW defaults file not found, skipping UFW IPv6 setting"
+    return
+  fi
+
+  if grep -qE '^IPV6=' "$UFW_DEFAULTS_FILE"; then
+    sed -i -E 's/^IPV6=.*/IPV6=yes/' "$UFW_DEFAULTS_FILE"
+  else
+    printf '\nIPV6=yes\n' >> "$UFW_DEFAULTS_FILE"
+  fi
+}
+
+enable_ipv6() {
+  local settings=(
+    net.ipv6.conf.all.disable_ipv6
+    net.ipv6.conf.default.disable_ipv6
+    net.ipv6.conf.lo.disable_ipv6
+  )
+
+  log "Enabling IPv6 on the host because DISABLE_IPV6=false"
+  rm -f "$IPV6_DISABLE_SYSCTL_FILE"
+  cat > "$IPV6_ENABLE_SYSCTL_FILE" <<'EOF'
+net.ipv6.conf.all.disable_ipv6 = 0
+net.ipv6.conf.default.disable_ipv6 = 0
+net.ipv6.conf.lo.disable_ipv6 = 0
+EOF
+
+  ensure_ufw_ipv6_enabled
+  sysctl --system >/dev/null || true
+
+  for setting in "${settings[@]}"; do
+    sysctl -w "$setting=0" >/dev/null || fail "Failed to enable IPv6 for $setting"
+  done
+
+  for setting in "${settings[@]}"; do
+    [[ "$(sysctl -n "$setting")" == "0" ]] || fail "Failed to verify IPv6 is enabled for $setting"
+  done
+
+  [[ -f /proc/net/if_inet6 ]] || fail "IPv6 kernel support is not active. Check kernel boot parameters such as ipv6.disable=1"
+
+  log "IPv6 has been enabled"
+}
+
 check_ipv6_status() {
   local ipv6_all ipv6_default
 
@@ -61,9 +108,9 @@ check_ipv6_status() {
     fi
   else
     if [[ "$ipv6_all" == "1" && "$ipv6_default" == "1" ]]; then
-      log "IPv6 is already disabled on this server, but DISABLE_IPV6=false in .env"
+      log "IPv6 is disabled on this server and will be enabled because DISABLE_IPV6=false in .env"
     else
-      log "IPv6 will stay enabled because DISABLE_IPV6=false in .env"
+      log "IPv6 is enabled and will be kept enabled because DISABLE_IPV6=false in .env"
     fi
   fi
 }
@@ -203,6 +250,9 @@ main() {
   create_or_update_user
   setup_ssh_key
   install_packages
+  if [[ "$DISABLE_IPV6" == "false" ]]; then
+    enable_ipv6
+  fi
   configure_ufw
   configure_ssh
   ensure_fail2ban

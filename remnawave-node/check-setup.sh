@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
 COMPOSE_DIR="/opt/remnanode"
 CERT_DIR="/etc/ssl/remnawave-node"
+IPV6_DISABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf"
+UFW_DEFAULTS_FILE="/etc/default/ufw"
 
 LOG_COLOR='\033[1;36m'
 LOG_RESET='\033[0m'
@@ -59,22 +61,46 @@ check_system() {
 
 check_ipv6() {
   section "IPv6"
+  local ipv6_all ipv6_default ipv6_lo
+
+  ipv6_all="$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo unknown)"
+  ipv6_default="$(sysctl -n net.ipv6.conf.default.disable_ipv6 2>/dev/null || echo unknown)"
+  ipv6_lo="$(sysctl -n net.ipv6.conf.lo.disable_ipv6 2>/dev/null || echo unknown)"
 
   if [[ "$DISABLE_IPV6" == "true" ]]; then
-    if [[ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
-       [[ "$(sysctl -n net.ipv6.conf.default.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
-       [[ "$(sysctl -n net.ipv6.conf.lo.disable_ipv6 2>/dev/null || echo 0)" == "1" ]]; then
+    if [[ "$ipv6_all" == "1" && "$ipv6_default" == "1" && "$ipv6_lo" == "1" ]]; then
       ok "IPv6 is disabled on the host"
     else
       warn "IPv6 is still enabled on the host, but DISABLE_IPV6=true in .env"
     fi
   else
-    if [[ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
-       [[ "$(sysctl -n net.ipv6.conf.default.disable_ipv6 2>/dev/null || echo 0)" == "1" ]] && \
-       [[ "$(sysctl -n net.ipv6.conf.lo.disable_ipv6 2>/dev/null || echo 0)" == "1" ]]; then
-      ok "IPv6 is disabled on the host, even though DISABLE_IPV6=false"
-    else
+    if [[ "$ipv6_all" == "0" && "$ipv6_default" == "0" && "$ipv6_lo" == "0" ]]; then
       ok "IPv6 is enabled on the host as configured by DISABLE_IPV6=false"
+    else
+      err "IPv6 is not fully enabled, but DISABLE_IPV6=false in .env"
+      err "Current sysctl values: all=$ipv6_all default=$ipv6_default lo=$ipv6_lo"
+    fi
+
+    if [[ -f /proc/net/if_inet6 ]]; then
+      ok "IPv6 kernel support is active"
+    else
+      err "IPv6 kernel support is not active. Check kernel boot parameters such as ipv6.disable=1"
+    fi
+
+    if [[ -f "$IPV6_DISABLE_SYSCTL_FILE" ]]; then
+      err "IPv6 disable config still exists: $IPV6_DISABLE_SYSCTL_FILE"
+    else
+      ok "No Remnawave IPv6 disable config is present"
+    fi
+
+    if [[ -f "$UFW_DEFAULTS_FILE" ]]; then
+      if grep -qE '^IPV6=yes$' "$UFW_DEFAULTS_FILE"; then
+        ok "UFW IPv6 support is enabled"
+      else
+        err "UFW IPv6 support is not enabled in $UFW_DEFAULTS_FILE"
+      fi
+    else
+      warn "UFW defaults file was not found: $UFW_DEFAULTS_FILE"
     fi
   fi
 }

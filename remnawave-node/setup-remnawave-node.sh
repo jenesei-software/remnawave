@@ -6,6 +6,9 @@ ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
 COMPOSE_DIR="/opt/remnanode"
 CERT_DIR="/etc/ssl/remnawave-node"
 COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
+IPV6_DISABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf"
+IPV6_ENABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-enable-ipv6.conf"
+UFW_DEFAULTS_FILE="/etc/default/ufw"
 
 LOG_COLOR='\033[1;36m'
 LOG_RESET='\033[0m'
@@ -51,10 +54,9 @@ validate_bool() {
 }
 
 disable_ipv6() {
-  local sysctl_file="/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf"
-
   log "Disabling IPv6 on the host"
-  cat > "$sysctl_file" <<'EOF'
+  rm -f "$IPV6_ENABLE_SYSCTL_FILE"
+  cat > "$IPV6_DISABLE_SYSCTL_FILE" <<'EOF'
 net.ipv6.conf.all.disable_ipv6 = 1
 net.ipv6.conf.default.disable_ipv6 = 1
 net.ipv6.conf.lo.disable_ipv6 = 1
@@ -67,6 +69,50 @@ EOF
   [[ "$(sysctl -n net.ipv6.conf.lo.disable_ipv6)" == "1" ]] || fail "Failed to disable IPv6 for net.ipv6.conf.lo.disable_ipv6"
 
   log "IPv6 has been disabled"
+}
+
+ensure_ufw_ipv6_enabled() {
+  if [[ ! -f "$UFW_DEFAULTS_FILE" ]]; then
+    log "UFW defaults file not found, skipping UFW IPv6 setting"
+    return
+  fi
+
+  if grep -qE '^IPV6=' "$UFW_DEFAULTS_FILE"; then
+    sed -i -E 's/^IPV6=.*/IPV6=yes/' "$UFW_DEFAULTS_FILE"
+  else
+    printf '\nIPV6=yes\n' >> "$UFW_DEFAULTS_FILE"
+  fi
+}
+
+enable_ipv6() {
+  local settings=(
+    net.ipv6.conf.all.disable_ipv6
+    net.ipv6.conf.default.disable_ipv6
+    net.ipv6.conf.lo.disable_ipv6
+  )
+
+  log "Enabling IPv6 on the host"
+  rm -f "$IPV6_DISABLE_SYSCTL_FILE"
+  cat > "$IPV6_ENABLE_SYSCTL_FILE" <<'EOF'
+net.ipv6.conf.all.disable_ipv6 = 0
+net.ipv6.conf.default.disable_ipv6 = 0
+net.ipv6.conf.lo.disable_ipv6 = 0
+EOF
+
+  ensure_ufw_ipv6_enabled
+  sysctl --system >/dev/null || true
+
+  for setting in "${settings[@]}"; do
+    sysctl -w "$setting=0" >/dev/null || fail "Failed to enable IPv6 for $setting"
+  done
+
+  for setting in "${settings[@]}"; do
+    [[ "$(sysctl -n "$setting")" == "0" ]] || fail "Failed to verify IPv6 is enabled for $setting"
+  done
+
+  [[ -f /proc/net/if_inet6 ]] || fail "IPv6 kernel support is not active. Check kernel boot parameters such as ipv6.disable=1"
+
+  log "IPv6 has been enabled"
 }
 
 install_docker_if_missing() {
@@ -186,6 +232,8 @@ main() {
   require_cmd curl
   require_cmd ufw
   require_cmd gpg
+  require_cmd grep
+  require_cmd sed
   require_cmd sysctl
   load_env
   require_vars
@@ -193,14 +241,15 @@ main() {
   DISABLE_IPV6="${DISABLE_IPV6:-true}"
   validate_bool "$DISABLE_IPV6"
 
+  if [[ "$DISABLE_IPV6" == "false" ]]; then
+    enable_ipv6
+  fi
   install_docker_if_missing
   configure_ufw
   install_acme_if_missing
   issue_certificate
   if [[ "$DISABLE_IPV6" == "true" ]]; then
     disable_ipv6
-  else
-    log "Skipping IPv6 disable because DISABLE_IPV6=false"
   fi
   write_compose
   start_stack
