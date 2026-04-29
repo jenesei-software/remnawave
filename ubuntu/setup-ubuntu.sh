@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
+REPO_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE_INPUT="${1:-}"
 IPV6_DISABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf"
 IPV6_ENABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-enable-ipv6.conf"
 UFW_DEFAULTS_FILE="/etc/default/ufw"
@@ -19,11 +20,52 @@ log_line() {
 
 log() { log_line "INFO" "$*"; }
 fail() { log_line "ERROR" "$*" >&2; exit 1; }
-require_root() { [[ ${EUID:-$(id -u)} -eq 0 ]] || fail "Run as root: sudo bash remnawave-node/setup-ubuntu.sh"; }
+require_root() { [[ ${EUID:-$(id -u)} -eq 0 ]] || fail "Run as root: sudo bash ubuntu/setup-ubuntu.sh remnawave-panel/.env"; }
 require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "Command not found: $1"; }
 
+resolve_env_path() {
+  local candidate="$1"
+  local candidate_dir
+  local candidate_base
+
+  if [[ "$candidate" = /* ]]; then
+    printf '%s\n' "$candidate"
+  elif [[ -f "$candidate" ]]; then
+    candidate_dir="$(cd -- "$(dirname -- "$candidate")" && pwd)"
+    candidate_base="$(basename -- "$candidate")"
+    printf '%s/%s\n' "$candidate_dir" "$candidate_base"
+  else
+    printf '%s/%s\n' "$REPO_DIR" "$candidate"
+  fi
+}
+
+resolve_env_file() {
+  if [[ -n "$ENV_FILE_INPUT" ]]; then
+    ENV_FILE="$(resolve_env_path "$ENV_FILE_INPUT")"
+    return
+  fi
+
+  if [[ -n "${ENV_FILE:-}" ]]; then
+    ENV_FILE="$(resolve_env_path "$ENV_FILE")"
+    return
+  fi
+
+  local candidates=()
+  [[ -f "$REPO_DIR/remnawave-panel/.env" ]] && candidates+=("$REPO_DIR/remnawave-panel/.env")
+  [[ -f "$REPO_DIR/remnawave-node/.env" ]] && candidates+=("$REPO_DIR/remnawave-node/.env")
+
+  if (( ${#candidates[@]} == 1 )); then
+    ENV_FILE="${candidates[0]}"
+    return
+  fi
+
+  fail "Specify env file explicitly: sudo bash ubuntu/setup-ubuntu.sh remnawave-panel/.env or sudo bash ubuntu/setup-ubuntu.sh remnawave-node/.env"
+}
+
 load_env() {
+  resolve_env_file
   [[ -f "$ENV_FILE" ]] || fail "Environment file not found: $ENV_FILE"
+  log "Loading environment from $ENV_FILE"
   set -a
   # shellcheck disable=SC1090
   source "$ENV_FILE"
@@ -36,7 +78,7 @@ require_vars() {
     [[ -n "${!var:-}" ]] || missing+=("$var")
   done
   if (( ${#missing[@]} > 0 )); then
-    fail "Missing required variables in .env: ${missing[*]}"
+    fail "Missing required variables in $ENV_FILE: ${missing[*]}"
   fi
 }
 
@@ -207,7 +249,7 @@ install_packages() {
   apt-get -y \
     -o Dpkg::Options::="--force-confdef" \
     -o Dpkg::Options::="--force-confold" \
-    install nano fail2ban ufw less ca-certificates curl gnupg
+    install nano fail2ban ufw less ca-certificates curl openssl gnupg
 }
 
 configure_hostname() {
@@ -237,27 +279,29 @@ main() {
   require_cmd sed
   require_cmd grep
   require_cmd ss
-  require_cmd sysctl
   load_env
   require_vars
   validate_port
-  DISABLE_IPV6="${DISABLE_IPV6:-true}"
-  validate_bool "$DISABLE_IPV6"
-  check_ipv6_status
+
+  if [[ -n "${DISABLE_IPV6:-}" ]]; then
+    require_cmd sysctl
+    validate_bool "$DISABLE_IPV6"
+    check_ipv6_status
+  fi
 
   configure_hostname
   configure_root_password
   create_or_update_user
   setup_ssh_key
   install_packages
-  if [[ "$DISABLE_IPV6" == "false" ]]; then
+  if [[ "${DISABLE_IPV6:-}" == "false" ]]; then
     enable_ipv6
   fi
   configure_ufw
   configure_ssh
   ensure_fail2ban
 
-  local connect_host="${SERVER_IP_V4:-${SERVER_DOMAIN:-<SERVER_IP>}}"
+  local connect_host="${SERVER_IP_V4:-${SERVER_DOMAIN:-${PANEL_DOMAIN:-<SERVER_IP>}}}"
   log "Done. Test the new SSH login with: ssh $USER_NAME@$connect_host -p $PORT_SSH"
   log "Keep the current root session open until the new SSH session works in a separate terminal"
 }

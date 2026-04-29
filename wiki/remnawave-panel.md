@@ -18,14 +18,14 @@ This guide treats the bundled **subscription-page** as part of the complete setu
 remnawave/
 |-- .gitignore
 |-- README.md
+|-- ubuntu/
+|   `-- setup-ubuntu.sh
 |-- remnawave-node/
 |   |-- .env.example
-|   |-- setup-ubuntu.sh
 |   |-- setup-remnawave-node.sh
 |   `-- check-setup.sh
 |-- remnawave-panel/
 |   |-- .env.example
-|   |-- setup-ubuntu.sh
 |   |-- setup-remnawave-panel.sh
 |   |-- setup-subscription-page.sh
 |   `-- check-setup.sh
@@ -36,7 +36,7 @@ remnawave/
 
 ## Included scripts
 
-### `remnawave-panel/setup-ubuntu.sh`
+### `ubuntu/setup-ubuntu.sh`
 
 Prepares a fresh Ubuntu server:
 
@@ -45,7 +45,7 @@ Prepares a fresh Ubuntu server:
 * creates a secondary user
 * adds an SSH public key
 * updates system packages
-* installs `nano`, `fail2ban`, `ufw`, `less`, `curl`, and `openssl`
+* installs `nano`, `fail2ban`, `ufw`, `less`, `curl`, `openssl`, and `gnupg`
 * changes the SSH port
 * disables SSH login for `root`
 * disables password-based SSH authentication
@@ -134,11 +134,12 @@ cp remnawave-panel/.env.example remnawave-panel/.env
 nano remnawave-panel/.env
 ```
 
-The scripts load `remnawave-panel/.env` by default.
+The panel deployment scripts load `remnawave-panel/.env` by default.
+The common Ubuntu bootstrap script should be run with `remnawave-panel/.env` as its first argument.
 
 The bundled `.env.example` is split into:
 
-* required values for `setup-ubuntu.sh`
+* required values for `ubuntu/setup-ubuntu.sh`
 * required values for `setup-remnawave-panel.sh`
 * required values for `setup-subscription-page.sh`
 * optional and advanced values you can leave as-is at first
@@ -262,7 +263,7 @@ nano remnawave-panel/.env
 ### 3. Run the Ubuntu bootstrap script
 
 ```bash
-sudo bash remnawave-panel/setup-ubuntu.sh
+sudo bash ubuntu/setup-ubuntu.sh remnawave-panel/.env
 ```
 
 After the script finishes, **do not close your current root session**.
@@ -355,7 +356,7 @@ git clone https://github.com/jenesei-software/remnawave.git
 cd remnawave
 cp remnawave-panel/.env.example remnawave-panel/.env
 nano remnawave-panel/.env
-sudo bash remnawave-panel/setup-ubuntu.sh
+sudo bash ubuntu/setup-ubuntu.sh remnawave-panel/.env
 ```
 
 After verifying the new SSH login:
@@ -381,7 +382,7 @@ sudo bash remnawave-panel/check-setup.sh
 ### Repository files
 
 * [remnawave-panel/.env.example](../remnawave-panel/.env.example)
-* [remnawave-panel/setup-ubuntu.sh](../remnawave-panel/setup-ubuntu.sh)
+* [ubuntu/setup-ubuntu.sh](../ubuntu/setup-ubuntu.sh)
 * [remnawave-panel/setup-remnawave-panel.sh](../remnawave-panel/setup-remnawave-panel.sh)
 * [remnawave-panel/setup-subscription-page.sh](../remnawave-panel/setup-subscription-page.sh)
 * [remnawave-panel/check-setup.sh](../remnawave-panel/check-setup.sh)

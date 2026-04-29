@@ -10,9 +10,10 @@ This repository is intended for users who want to bootstrap a fresh server quick
 remnawave/
 |-- .gitignore
 |-- README.md
+|-- ubuntu/
+|   `-- setup-ubuntu.sh
 |-- remnawave-panel/
 |   |-- .env.example
-|   |-- setup-ubuntu.sh
 |   |-- setup-remnawave-panel.sh
 |   |-- setup-subscription-page.sh
 |   `-- check-setup.sh
@@ -21,14 +22,13 @@ remnawave/
 |   `-- remnawave-node.md
 `-- remnawave-node/
     |-- .env.example
-    |-- setup-ubuntu.sh
     |-- setup-remnawave-node.sh
     `-- check-setup.sh
 ```
 
 ## Included scripts
 
-### `remnawave-node/setup-ubuntu.sh`
+### `ubuntu/setup-ubuntu.sh`
 
 Prepares a fresh Ubuntu server:
 
@@ -37,7 +37,7 @@ Prepares a fresh Ubuntu server:
 * creates a secondary user
 * adds an SSH public key
 * updates system packages
-* installs `nano`, `fail2ban`, `ufw`, and `less`
+* installs `nano`, `fail2ban`, `ufw`, `less`, `curl`, `openssl`, and `gnupg`
 * checks the current IPv6 status
 * enables IPv6 and UFW IPv6 support when `DISABLE_IPV6=false`
 * changes the SSH port
@@ -101,7 +101,8 @@ Fill in all required values before running any script.
 
 ## `.env` variables
 
-The scripts load `remnawave-node/.env` by default.
+The node deployment scripts load `remnawave-node/.env` by default.
+The common Ubuntu bootstrap script should be run with `remnawave-node/.env` as its first argument.
 
 ### Ubuntu setup
 
@@ -176,7 +177,7 @@ Fill in `remnawave-node/.env` before running any scripts.
 ### 3. Run the Ubuntu bootstrap script
 
 ```bash
-sudo bash remnawave-node/setup-ubuntu.sh
+sudo bash ubuntu/setup-ubuntu.sh remnawave-node/.env
 ```
 
 After the script finishes, **do not close your current root session**.
@@ -219,7 +220,7 @@ git clone https://github.com/jenesei-software/remnawave.git
 cd remnawave
 cp remnawave-node/.env.example remnawave-node/.env
 nano remnawave-node/.env
-sudo bash remnawave-node/setup-ubuntu.sh
+sudo bash ubuntu/setup-ubuntu.sh remnawave-node/.env
 ```
 
 After verifying the new SSH login:
@@ -235,7 +236,7 @@ sudo bash remnawave-node/check-setup.sh
 ### Repository files
 
 * [remnawave-node/.env.example](../remnawave-node/.env.example)
-* [remnawave-node/setup-ubuntu.sh](../remnawave-node/setup-ubuntu.sh)
+* [ubuntu/setup-ubuntu.sh](../ubuntu/setup-ubuntu.sh)
 * [remnawave-node/setup-remnawave-node.sh](../remnawave-node/setup-remnawave-node.sh)
 * [remnawave-node/check-setup.sh](../remnawave-node/check-setup.sh)
 
@@ -312,9 +313,9 @@ systemctl status fail2ban
 
 ## Important notes
 
-* Run `setup-ubuntu.sh` carefully on a fresh server and only if your SSH public key is correct.
+* Run `ubuntu/setup-ubuntu.sh` carefully on a fresh server and only if your SSH public key is correct.
 * The script disables password-based SSH login, so an invalid `SSH_PUB` value may lock you out of the server.
-* `sudo` is normally not required after `setup-ubuntu.sh`; SSH must switch to `PORT_SSH` immediately.
+* `sudo` is normally not required after `ubuntu/setup-ubuntu.sh`; SSH must switch to `PORT_SSH` immediately.
 * If the new SSH port does not accept connections right away on Ubuntu 24.04, run: `sudo systemctl daemon-reload && sudo systemctl restart ssh.socket && sudo systemctl restart ssh`.
 * Keep your current root SSH session open until a new session on `PORT_SSH` is confirmed.
 * `acme.sh` requires your domain to already point to the target server.
