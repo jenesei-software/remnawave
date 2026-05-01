@@ -56,10 +56,11 @@ Deploys a Remnawave Node:
 * opens `PORT_NODE`
 * opens `8443/tcp` for `acme.sh`
 * opens ports from `PORT_ARRAY_INBOUNDS`
-* installs `acme.sh`
-* issues a Let's Encrypt certificate for `SERVER_DOMAIN`
+* installs `acme.sh` when `SERVER_DOMAIN` is set
+* issues a Let's Encrypt certificate for `SERVER_DOMAIN` when it is set
+* omits `SSL_CERT`, `SSL_KEY`, and the TLS volume from Docker Compose when `SERVER_DOMAIN` is empty
 * enables or disables IPv6 on the host according to `DISABLE_IPV6`
-* stores certificates in `/etc/ssl/remnawave-node`
+* stores certificates in `/etc/ssl/remnawave-node` when `SERVER_DOMAIN` is set
 * creates `/opt/remnanode/docker-compose.yml`
 * starts the `remnanode` container
 
@@ -84,7 +85,7 @@ Before you begin, make sure you have:
 
 * a server running **Ubuntu 24.04**
 * root access to the server
-* a domain name already pointed to the server
+* a domain name already pointed to the server if you want the script to issue TLS certificates
 * a valid SSH public key
 * the ability to open the required ports from the internet
 
@@ -97,7 +98,7 @@ cp remnawave-node/.env.example remnawave-node/.env
 nano remnawave-node/.env
 ```
 
-Fill in all required values before running any script.
+Fill in all required values before running any script. `SERVER_DOMAIN` is optional for `remnawave-node/setup-remnawave-node.sh`.
 
 ## `.env` variables
 
@@ -147,6 +148,10 @@ DISABLE_IPV6=true
 PORT_ARRAY_INBOUNDS=30000,30001
 REMNAWAVE_NODE_IMAGE=remnawave/node:latest
 ```
+
+`SERVER_DOMAIN` is optional for the node deployment script. When it is empty, the script skips `acme.sh`, does not issue certificates, and writes Docker Compose without `SSL_CERT`, `SSL_KEY`, or the `/etc/ssl/remnawave-node` volume.
+
+`DOMAIN_MAIL` is required only when `SERVER_DOMAIN` is set.
 
 `DISABLE_IPV6` controls the host IPv6 state. Set it to `true` to disable IPv6. Set it to `false` to actively enable IPv6, remove the Remnawave IPv6 disable sysctl file, and set `IPV6=yes` in UFW defaults so firewall settings do not block IPv6 rules.
 
@@ -243,8 +248,8 @@ sudo bash remnawave-node/check-setup.sh
 ### Important files on the server
 
 * `/opt/remnanode/docker-compose.yml` - active Remnawave Node compose file
-* `/etc/ssl/remnawave-node/cert.pem` - node TLS certificate
-* `/etc/ssl/remnawave-node/key.pem` - node TLS private key
+* `/etc/ssl/remnawave-node/cert.pem` - node TLS certificate when `SERVER_DOMAIN` is set
+* `/etc/ssl/remnawave-node/key.pem` - node TLS private key when `SERVER_DOMAIN` is set
 * `/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf` - IPv6 disable config when `DISABLE_IPV6=true`
 * `/etc/sysctl.d/99-remnawave-node-enable-ipv6.conf` - IPv6 enable config when `DISABLE_IPV6=false`
 * `/etc/default/ufw` - UFW defaults; `IPV6=yes` is enforced when `DISABLE_IPV6=false`
@@ -292,6 +297,8 @@ nano /opt/remnanode/docker-compose.yml
 ls -l /etc/ssl/remnawave-node
 ```
 
+Certificate files are expected only when `SERVER_DOMAIN` is set.
+
 ### Open the IPv6 sysctl files
 
 ```bash
@@ -318,9 +325,10 @@ systemctl status fail2ban
 * `sudo` is normally not required after `ubuntu/setup-ubuntu.sh`; SSH must switch to `PORT_SSH` immediately.
 * If the new SSH port does not accept connections right away on Ubuntu 24.04, run: `sudo systemctl daemon-reload && sudo systemctl restart ssh.socket && sudo systemctl restart ssh`.
 * Keep your current root SSH session open until a new session on `PORT_SSH` is confirmed.
-* `acme.sh` requires your domain to already point to the target server.
-* The required validation port must be reachable from the public internet.
+* `acme.sh` requires your domain to already point to the target server when `SERVER_DOMAIN` is set.
+* The required validation port must be reachable from the public internet when `SERVER_DOMAIN` is set.
 * This project opens `8443/tcp` as part of the certificate automation flow.
+* If `SERVER_DOMAIN` is empty, `setup-remnawave-node.sh` does not pass TLS certificate paths to the node container.
 * `setup-remnawave-node.sh` disables IPv6 when `DISABLE_IPV6=true` in `.env`.
 * When `DISABLE_IPV6=false`, the scripts actively enable IPv6, remove the Remnawave IPv6 disable sysctl file, and set UFW `IPV6=yes`.
 * If you disable IPv6 through `DISABLE_IPV6=true`, do not leave active AAAA DNS records pointing to this server unless you manage that separately.

@@ -183,6 +183,11 @@ check_listening_ports() {
 
 check_certs() {
   section "Certificates"
+  if [[ -z "${SERVER_DOMAIN:-}" ]]; then
+    info "SERVER_DOMAIN is not set; certificate files are not required"
+    return
+  fi
+
   [[ -f "$CERT_DIR/cert.pem" ]] && ok "Found cert.pem" || err "Missing $CERT_DIR/cert.pem"
   [[ -f "$CERT_DIR/key.pem" ]] && ok "Found key.pem" || err "Missing $CERT_DIR/key.pem"
 }

@@ -35,9 +35,12 @@ load_env() {
 
 require_vars() {
   local missing=()
-  for var in DOMAIN_MAIL SERVER_DOMAIN PORT_NODE NODE_SECRET; do
+  for var in PORT_NODE NODE_SECRET; do
     [[ -n "${!var:-}" ]] || missing+=("$var")
   done
+  if [[ -n "${SERVER_DOMAIN:-}" && -z "${DOMAIN_MAIL:-}" ]]; then
+    missing+=("DOMAIN_MAIL")
+  fi
   if (( ${#missing[@]} > 0 )); then
     fail "Missing required variables in .env: ${missing[*]}"
   fi
@@ -193,6 +196,15 @@ issue_certificate() {
     --fullchain-file "$CERT_DIR/cert.pem"
 }
 
+ensure_certificate() {
+  if [[ -n "${SERVER_DOMAIN:-}" ]]; then
+    install_acme_if_missing
+    issue_certificate
+  else
+    log "SERVER_DOMAIN is not set; skipping TLS certificate issuance"
+  fi
+}
+
 write_compose() {
   local image="${REMNAWAVE_NODE_IMAGE:-remnawave/node:latest}"
 
@@ -214,11 +226,16 @@ services:
     environment:
       NODE_PORT: "${PORT_NODE}"
       SECRET_KEY: "${NODE_SECRET}"
+YAML
+
+  if [[ -n "${SERVER_DOMAIN:-}" ]]; then
+    cat >> "$COMPOSE_FILE" <<YAML
       SSL_CERT: /etc/ssl/remnawave-node/cert.pem
       SSL_KEY: /etc/ssl/remnawave-node/key.pem
     volumes:
       - /etc/ssl/remnawave-node:/etc/ssl/remnawave-node:ro
 YAML
+  fi
 }
 
 start_stack() {
@@ -246,8 +263,7 @@ main() {
   fi
   install_docker_if_missing
   configure_ufw
-  install_acme_if_missing
-  issue_certificate
+  ensure_certificate
   if [[ "$DISABLE_IPV6" == "true" ]]; then
     disable_ipv6
   fi
