@@ -6,6 +6,8 @@ ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
 COMPOSE_DIR="/opt/remnanode"
 CERT_DIR="/etc/ssl/remnawave-node"
 IPV6_DISABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf"
+IPV6_ENABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-enable-ipv6.conf"
+IPV6_LEGACY_DISABLE_SYSCTL_FILE="/etc/sysctl.d/11-disable-ipv6.conf"
 UFW_DEFAULTS_FILE="/etc/default/ufw"
 
 LOG_COLOR='\033[1;36m'
@@ -45,12 +47,48 @@ check_cmd() {
   fi
 }
 
+resolve_ipv6_interface() {
+  if [[ -n "${IPV6_INTERFACE:-}" ]]; then
+    printf '%s\n' "$IPV6_INTERFACE"
+    return
+  fi
+
+  local iface
+  if command -v ip >/dev/null 2>&1; then
+    iface="$(ip -o -6 route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | sed -n '1p' || true)"
+    if [[ -z "$iface" ]]; then
+      iface="$(ip -o -4 route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | sed -n '1p' || true)"
+    fi
+  fi
+
+  if [[ -z "${iface:-}" && -d /sys/class/net/eth0 ]]; then
+    iface="eth0"
+  fi
+
+  [[ -n "${iface:-}" ]] || return 1
+  printf '%s\n' "$iface"
+}
+
+check_sysctl_value() {
+  local setting="$1"
+  local expected="$2"
+  local value
+
+  value="$(sysctl -n "$setting" 2>/dev/null || echo unknown)"
+  if [[ "$value" == "$expected" ]]; then
+    ok "$setting=$expected"
+  else
+    err "$setting expected $expected, got $value"
+  fi
+}
+
 check_system() {
   section "Base system"
   check_cmd ssh
   check_cmd ufw
   check_cmd fail2ban-client
   check_cmd docker
+  check_cmd ip
   check_cmd ss
   check_cmd sysctl
 
@@ -62,6 +100,7 @@ check_system() {
 check_ipv6() {
   section "IPv6"
   local ipv6_all ipv6_default ipv6_lo
+  local iface
 
   ipv6_all="$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo unknown)"
   ipv6_default="$(sysctl -n net.ipv6.conf.default.disable_ipv6 2>/dev/null || echo unknown)"
@@ -74,11 +113,22 @@ check_ipv6() {
       warn "IPv6 is still enabled on the host, but DISABLE_IPV6=true in .env"
     fi
   else
-    if [[ "$ipv6_all" == "0" && "$ipv6_default" == "0" && "$ipv6_lo" == "0" ]]; then
-      ok "IPv6 is enabled on the host as configured by DISABLE_IPV6=false"
+    if iface="$(resolve_ipv6_interface)"; then
+      ok "IPv6 network interface: $iface"
     else
-      err "IPv6 is not fully enabled, but DISABLE_IPV6=false in .env"
-      err "Current sysctl values: all=$ipv6_all default=$ipv6_default lo=$ipv6_lo"
+      err "Could not detect IPv6 network interface. Set IPV6_INTERFACE in .env."
+    fi
+
+    check_sysctl_value net.ipv6.conf.all.disable_ipv6 0
+    check_sysctl_value net.ipv6.conf.default.disable_ipv6 0
+    check_sysctl_value net.ipv6.conf.lo.disable_ipv6 0
+    check_sysctl_value net.ipv6.conf.all.forwarding 1
+    check_sysctl_value net.ipv6.conf.all.addr_gen_mode 0
+
+    if [[ -n "${iface:-}" ]]; then
+      check_sysctl_value "net.ipv6.conf.${iface}.disable_ipv6" 0
+      check_sysctl_value "net.ipv6.conf.${iface}.accept_ra" 2
+      check_sysctl_value "net.ipv6.conf.${iface}.use_tempaddr" 0
     fi
 
     if [[ -f /proc/net/if_inet6 ]]; then
@@ -87,10 +137,22 @@ check_ipv6() {
       err "IPv6 kernel support is not active. Check kernel boot parameters such as ipv6.disable=1"
     fi
 
+    if [[ -f "$IPV6_ENABLE_SYSCTL_FILE" ]]; then
+      ok "IPv6 enable config is present: $IPV6_ENABLE_SYSCTL_FILE"
+    else
+      err "IPv6 enable config is missing: $IPV6_ENABLE_SYSCTL_FILE"
+    fi
+
     if [[ -f "$IPV6_DISABLE_SYSCTL_FILE" ]]; then
       err "IPv6 disable config still exists: $IPV6_DISABLE_SYSCTL_FILE"
     else
       ok "No Remnawave IPv6 disable config is present"
+    fi
+
+    if [[ -f "$IPV6_LEGACY_DISABLE_SYSCTL_FILE" ]]; then
+      err "Legacy IPv6 disable config still exists: $IPV6_LEGACY_DISABLE_SYSCTL_FILE"
+    else
+      ok "No legacy IPv6 disable config is present"
     fi
 
     if [[ -f "$UFW_DEFAULTS_FILE" ]]; then

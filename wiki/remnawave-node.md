@@ -39,7 +39,7 @@ Prepares a fresh Ubuntu server:
 * updates system packages
 * installs `nano`, `fail2ban`, `ufw`, `less`, `curl`, `openssl`, and `gnupg`
 * checks the current IPv6 status
-* enables IPv6 and UFW IPv6 support when `DISABLE_IPV6=false`
+* enables IPv6, interface RA settings, forwarding, and UFW IPv6 support when `DISABLE_IPV6=false`
 * changes the SSH port
 * disables SSH login for `root`
 * disables password-based SSH authentication
@@ -69,7 +69,7 @@ Deploys a Remnawave Node:
 Verifies the final setup:
 
 * checks required commands and services
-* checks whether IPv6 matches the configured `DISABLE_IPV6` value
+* checks whether IPv6 sysctl values match the configured `DISABLE_IPV6` value
 * shows `fail2ban`, `docker`, and UFW status
 * shows SSH-related configuration
 * prints service health information
@@ -125,6 +125,7 @@ DOMAIN_MAIL=
 PORT_NODE=
 NODE_SECRET=
 DISABLE_IPV6=true
+IPV6_INTERFACE=
 PORT_ARRAY_INBOUNDS=
 REMNAWAVE_NODE_IMAGE=remnawave/node:latest
 ```
@@ -145,6 +146,7 @@ DOMAIN_MAIL=admin@example.com
 PORT_NODE=22222
 NODE_SECRET=very-secret-key
 DISABLE_IPV6=true
+IPV6_INTERFACE=
 PORT_ARRAY_INBOUNDS=30000,30001
 REMNAWAVE_NODE_IMAGE=remnawave/node:latest
 ```
@@ -153,7 +155,9 @@ REMNAWAVE_NODE_IMAGE=remnawave/node:latest
 
 `DOMAIN_MAIL` is required only when `SERVER_DOMAIN` is set.
 
-`DISABLE_IPV6` controls the host IPv6 state. Set it to `true` to disable IPv6. Set it to `false` to actively enable IPv6, remove the Remnawave IPv6 disable sysctl file, and set `IPV6=yes` in UFW defaults so firewall settings do not block IPv6 rules.
+`DISABLE_IPV6` controls the host IPv6 state. Set it to `true` to disable IPv6. Set it to `false` to actively enable IPv6, remove Remnawave and legacy IPv6 disable sysctl files, enable IPv6 forwarding, enable router advertisements on the selected interface, disable temporary IPv6 addresses on that interface, and set `IPV6=yes` in UFW defaults so firewall settings do not block IPv6 rules.
+
+`IPV6_INTERFACE` is optional when `DISABLE_IPV6=false`. Leave it empty to auto-detect the default network interface, or set it explicitly, for example `eth0`, `ens3`, or `enp1s0`.
 
 ## Usage
 
@@ -252,6 +256,7 @@ sudo bash remnawave-node/check-setup.sh
 * `/etc/ssl/remnawave-node/key.pem` - node TLS private key when `SERVER_DOMAIN` is set
 * `/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf` - IPv6 disable config when `DISABLE_IPV6=true`
 * `/etc/sysctl.d/99-remnawave-node-enable-ipv6.conf` - IPv6 enable config when `DISABLE_IPV6=false`
+* `/etc/sysctl.d/11-disable-ipv6.conf` - legacy IPv6 disable config removed when `DISABLE_IPV6=false`
 * `/etc/default/ufw` - UFW defaults; `IPV6=yes` is enforced when `DISABLE_IPV6=false`
 
 ## Useful commands
@@ -330,7 +335,7 @@ systemctl status fail2ban
 * This project opens `8443/tcp` as part of the certificate automation flow.
 * If `SERVER_DOMAIN` is empty, `setup-remnawave-node.sh` does not pass TLS certificate paths to the node container.
 * `setup-remnawave-node.sh` disables IPv6 when `DISABLE_IPV6=true` in `.env`.
-* When `DISABLE_IPV6=false`, the scripts actively enable IPv6, remove the Remnawave IPv6 disable sysctl file, and set UFW `IPV6=yes`.
+* When `DISABLE_IPV6=false`, the scripts actively enable IPv6, remove Remnawave and legacy IPv6 disable sysctl files, configure forwarding/router advertisements/address generation/tempaddr sysctls, restart an active supported network service, and set UFW `IPV6=yes`.
 * If you disable IPv6 through `DISABLE_IPV6=true`, do not leave active AAAA DNS records pointing to this server unless you manage that separately.
 * Ports from `PORT_ARRAY_INBOUNDS` are opened as **TCP** ports only.
 * If you also need UDP ports, extend the firewall rules accordingly.

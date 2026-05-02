@@ -8,6 +8,7 @@ CERT_DIR="/etc/ssl/remnawave-node"
 COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
 IPV6_DISABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-disable-ipv6.conf"
 IPV6_ENABLE_SYSCTL_FILE="/etc/sysctl.d/99-remnawave-node-enable-ipv6.conf"
+IPV6_LEGACY_DISABLE_SYSCTL_FILE="/etc/sysctl.d/11-disable-ipv6.conf"
 UFW_DEFAULTS_FILE="/etc/default/ufw"
 
 LOG_COLOR='\033[1;36m'
@@ -87,31 +88,107 @@ ensure_ufw_ipv6_enabled() {
   fi
 }
 
+resolve_ipv6_interface() {
+  if [[ -n "${IPV6_INTERFACE:-}" ]]; then
+    printf '%s\n' "$IPV6_INTERFACE"
+    return
+  fi
+
+  local iface
+  iface="$(ip -o -6 route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | sed -n '1p' || true)"
+  if [[ -z "$iface" ]]; then
+    iface="$(ip -o -4 route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | sed -n '1p' || true)"
+  fi
+  if [[ -z "$iface" && -d /sys/class/net/eth0 ]]; then
+    iface="eth0"
+  fi
+
+  [[ -n "$iface" ]] || fail "Could not detect network interface for IPv6. Set IPV6_INTERFACE in .env."
+  printf '%s\n' "$iface"
+}
+
+ipv6_enable_settings() {
+  local iface="$1"
+  printf '%s\n' \
+    "net.ipv6.conf.all.disable_ipv6=0" \
+    "net.ipv6.conf.default.disable_ipv6=0" \
+    "net.ipv6.conf.lo.disable_ipv6=0" \
+    "net.ipv6.conf.${iface}.disable_ipv6=0" \
+    "net.ipv6.conf.${iface}.accept_ra=2" \
+    "net.ipv6.conf.all.forwarding=1" \
+    "net.ipv6.conf.all.addr_gen_mode=0" \
+    "net.ipv6.conf.${iface}.use_tempaddr=0"
+}
+
+apply_ipv6_enable_settings() {
+  local iface="$1"
+  local setting expected pair
+
+  while IFS= read -r pair; do
+    setting="${pair%%=*}"
+    expected="${pair#*=}"
+    sysctl -w "$setting=$expected" >/dev/null || fail "Failed to set $setting=$expected"
+  done < <(ipv6_enable_settings "$iface")
+}
+
+verify_ipv6_enable_settings() {
+  local iface="$1"
+  local setting expected pair value
+
+  while IFS= read -r pair; do
+    setting="${pair%%=*}"
+    expected="${pair#*=}"
+    value="$(sysctl -n "$setting" 2>/dev/null || echo unknown)"
+    [[ "$value" == "$expected" ]] || fail "Failed to verify $setting=$expected, current value is $value"
+  done < <(ipv6_enable_settings "$iface")
+}
+
+restart_network_for_ipv6() {
+  local restarted=false
+
+  if systemctl is-active --quiet systemd-networkd 2>/dev/null; then
+    log "Restarting systemd-networkd to apply IPv6 settings"
+    systemctl restart systemd-networkd || log "Could not restart systemd-networkd"
+    restarted=true
+  fi
+
+  if systemctl is-active --quiet NetworkManager 2>/dev/null; then
+    log "Restarting NetworkManager to apply IPv6 settings"
+    systemctl restart NetworkManager || log "Could not restart NetworkManager"
+    restarted=true
+  fi
+
+  if [[ "$restarted" == "false" ]]; then
+    log "No supported network service is active, skipping network restart"
+  fi
+}
+
 enable_ipv6() {
-  local settings=(
-    net.ipv6.conf.all.disable_ipv6
-    net.ipv6.conf.default.disable_ipv6
-    net.ipv6.conf.lo.disable_ipv6
-  )
+  local iface
 
   log "Enabling IPv6 on the host"
-  rm -f "$IPV6_DISABLE_SYSCTL_FILE"
-  cat > "$IPV6_ENABLE_SYSCTL_FILE" <<'EOF'
+  iface="$(resolve_ipv6_interface)"
+  log "Using IPv6 network interface: $iface"
+
+  rm -f "$IPV6_DISABLE_SYSCTL_FILE" "$IPV6_LEGACY_DISABLE_SYSCTL_FILE"
+  cat > "$IPV6_ENABLE_SYSCTL_FILE" <<EOF
 net.ipv6.conf.all.disable_ipv6 = 0
 net.ipv6.conf.default.disable_ipv6 = 0
 net.ipv6.conf.lo.disable_ipv6 = 0
+net.ipv6.conf.${iface}.disable_ipv6 = 0
+net.ipv6.conf.${iface}.accept_ra = 2
+net.ipv6.conf.all.forwarding = 1
+net.ipv6.conf.all.addr_gen_mode = 0
+net.ipv6.conf.${iface}.use_tempaddr = 0
 EOF
 
   ensure_ufw_ipv6_enabled
   sysctl --system >/dev/null || true
 
-  for setting in "${settings[@]}"; do
-    sysctl -w "$setting=0" >/dev/null || fail "Failed to enable IPv6 for $setting"
-  done
-
-  for setting in "${settings[@]}"; do
-    [[ "$(sysctl -n "$setting")" == "0" ]] || fail "Failed to verify IPv6 is enabled for $setting"
-  done
+  apply_ipv6_enable_settings "$iface"
+  restart_network_for_ipv6
+  apply_ipv6_enable_settings "$iface"
+  verify_ipv6_enable_settings "$iface"
 
   [[ -f /proc/net/if_inet6 ]] || fail "IPv6 kernel support is not active. Check kernel boot parameters such as ipv6.disable=1"
 
